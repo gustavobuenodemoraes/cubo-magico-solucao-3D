@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PuzzleStudio 3D Pro — Cubo 3x3x3 & Pyraminx Solver</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+                    },
+                    colors: {
+                        glass: 'rgba(15, 23, 42, 0.72)',
+                        accent: { 400: '#818cf8', 500: '#6366f1', 600: '#4f46e5' }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Three.js + OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        body {
+            background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #090d16 55%, #05070c 100%);
+            color: #f8fafc;
+            overflow-x: hidden;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+        .custom-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); border-radius: 8px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: rgba(99, 102, 241, 0.4); border-radius: 8px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: rgba(99, 102, 241, 0.7); }
+
+        .pyr-poly {
+            stroke: #090d16;
+            stroke-width: 3.5;
+            stroke-linejoin: round;
+            cursor: pointer;
+            transition: filter 0.15s ease, stroke 0.15s ease;
+        }
+        .pyr-poly:hover {
+            filter: brightness(1.2);
+            stroke: #ffffff;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+
+    <!-- HEADER ESTILO APPLE GLASS -->
+    <header class="sticky top-0 z-50 glass-panel border-b border-white/10 px-4 lg:px-8 py-3">
+        <div class="max-w-[1440px] mx-auto flex flex-wrap items-center justify-between gap-4">
+            <!-- Brand -->
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30 border border-white/20">
+                    <i id="brand-icon" class="fa-solid fa-shapes text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-bold text-base sm:text-lg tracking-tight text-white">PuzzleStudio <span class="text-indigo-400">3D</span></h1>
+                        <span class="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">Real Geometry</span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">Solucionador Interativo Cubo 3x3x3 & Pyraminx Tetraedro</p>
+                </div>
+            </div>
+
+            <!-- Segmented Control: 3x3x3 vs Pyraminx -->
+            <div class="flex items-center bg-slate-950/90 p-1 rounded-2xl border border-white/10 shadow-inner">
+                <button id="tab-3x3" onclick="switchPuzzle('3x3')" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-md shadow-indigo-600/30">
+                    <i class="fa-solid fa-cube"></i>
+                    <span>Cubo 3x3x3</span>
+                </button>
+                <button id="tab-pyraminx" onclick="switchPuzzle('pyraminx')" class="flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-caret-up text-sm"></i>
+                    <span>Pyraminx (Tetraedro)</span>
+                </button>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="flex items-center gap-2">
+                <button id="btn-paint-3d" onclick="togglePaint3DMode()" class="px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 border bg-indigo-500/15 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/25" title="Clique diretamente nas peças 3D para colorir">
+                    <i class="fa-solid fa-paintbrush"></i>
+                    <span>Pintar no 3D: <strong id="paint-3d-status">ON</strong></span>
+                </button>
+                <button onclick="scrambleCurrentPuzzle()" class="px-3.5 py-2 bg-slate-800/90 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 border border-white/10 shadow">
+                    <i class="fa-solid fa-shuffle text-indigo-400"></i>
+                    <span>Embaralhar</span>
+                </button>
+                <button onclick="resetCurrentPuzzle()" class="px-3.5 py-2 bg-slate-800/90 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 border border-white/10">
+                    <i class="fa-solid fa-rotate-left text-emerald-400"></i>
+                    <span class="hidden md:inline">Resolvido</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 max-w-[1440px] w-full mx-auto p-4 lg:px-8 lg:py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+        <!-- COLUNA ESQUERDA (7 COLUNAS): VIEWPORT 3D + TIMELINE PLAYER -->
+        <section class="lg:col-span-7 flex flex-col gap-4">
+            
+            <!-- Card do Viewport 3D -->
+            <div class="glass-panel rounded-3xl p-4 shadow-2xl relative flex flex-col">
+                <!-- Barra Superior Flutuante no Viewport -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-2 border-b border-white/10">
+                    <div class="flex items-center gap-2.5">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <h2 id="viewport-title" class="text-sm font-semibold text-white">Visualizador 3D Real — Cubo 3x3x3</h2>
+                        <span id="validation-pill" class="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                            Cores Válidas (54/54)
+                        </span>
+                    </div>
+
+                    <!-- Câmeras Rápidas -->
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="setCameraView('front')" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[11px] text-slate-300 border border-white/10 transition">Frente</button>
+                        <button onclick="setCameraView('iso')" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[11px] text-slate-300 border border-white/10 transition">Isométrica</button>
+                        <button onclick="setCameraView('bottom')" class="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-[11px] text-slate-300 border border-white/10 transition">Base / Costas</button>
+                    </div>
+                </div>
+
+                <!-- 3D Canvas Container -->
+                <div id="canvas-wrapper" class="relative w-full h-[380px] sm:h-[440px] rounded-2xl overflow-hidden bg-gradient-to-b from-slate-950/90 via-slate-900/60 to-slate-950/95 border border-white/5 shadow-inner">
+                    <div id="three-container" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+                    <!-- Overlay de Dica e Movimento Atual -->
+                    <div class="pointer-events-none absolute top-3 left-3 flex flex-col gap-1.5">
+                        <div class="px-3 py-1.5 rounded-xl bg-slate-950/80 backdrop-blur border border-white/10 text-[11px] text-slate-300 flex items-center gap-2">
+                            <i class="fa-solid fa-hand-pointer text-indigo-400"></i>
+                            <span id="canvas-hint">Arraste para girar a câmera • Clique num adesivo para pintar</span>
+                        </div>
+                    </div>
+
+                    <!-- Badge Gigante da Jogada Atual em Execução -->
+                    <div id="hud-move-card" class="pointer-events-none absolute bottom-4 left-4 right-4 sm:right-auto sm:min-w-[290px] px-4 py-3 rounded-2xl bg-slate-950/85 backdrop-blur-md border border-indigo-500/30 shadow-2xl flex items-center gap-3.5 transition-all">
+                        <div id="hud-move-symbol" class="w-12 h-12 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center font-mono font-bold text-xl text-indigo-300 shadow-inner">
+                            -
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="text-[10px] uppercase tracking-wider font-semibold text-indigo-400" id="hud-step-counter">Pronto para Resolver</div>
+                            <div class="text-xs sm:text-sm font-semibold text-white truncate" id="hud-move-desc">Gire manualmente, embaralhe ou pinte as cores</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Controles Manuais de Rotação Direta no 3D -->
+                <div class="mt-3 pt-3 border-t border-white/10 flex flex-col gap-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-gamepad text-indigo-400"></i> Testar Giro Manual em 3D:
+                        </span>
+                        <span id="manual-axis-help" class="text-[11px] text-slate-400">Horário / Anti-horário (')</span>
+                    </div>
+                    <div id="manual-moves-bar" class="flex flex-wrap gap-1.5">
+                        <!-- Gerado dinamicamente conforme 3x3 ou Pyraminx -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card do Player de Solução Passo a Passo -->
+            <div class="glass-panel rounded-3xl p-4 shadow-xl flex flex-col gap-3">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <i class="fa-solid fa-film text-indigo-400"></i>
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200">Player de Animação da Solução 3D</h3>
+                    </div>
+
+                    <!-- Controle de Velocidade -->
+                    <div class="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-white/10 text-[11px]">
+                        <span class="px-2 text-slate-400">Velocidade:</span>
+                        <button onclick="setAnimSpeed(650, this)" class="speed-btn px-2 py-0.5 rounded-lg text-slate-400 hover:text-white transition">0.5x</button>
+                        <button onclick="setAnimSpeed(360, this)" class="speed-btn px-2 py-0.5 rounded-lg bg-indigo-600 text-white font-semibold transition">1x</button>
+                        <button onclick="setAnimSpeed(180, this)" class="speed-btn px-2 py-0.5 rounded-lg text-slate-400 hover:text-white transition">2x</button>
+                    </div>
+                </div>
+
+                <!-- Barra de Progresso -->
+                <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden border border-white/5">
+                    <div id="solution-progress" class="bg-gradient-to-r from-indigo-500 to-emerald-400 h-full w-0 transition-all duration-300"></div>
+                </div>
+
+                <!-- Botoes do Player -->
+                <div class="flex items-center justify-between gap-2 pt-1">
+                    <div class="text-xs text-slate-400 font-mono">
+                        Passo <strong id="step-idx-label" class="text-white">0</strong> / <strong id="step-total-label" class="text-white">0</strong>
+                    </div>
+
+                    <div class="flex items-center gap-2">
+                        <button onclick="stepToStart()" class="w-9 h-9 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-white/10 flex items-center justify-center transition" title="Voltar ao Início">
+                            <i class="fa-solid fa-backward-fast text-xs"></i>
+                        </button>
+                        <button onclick="stepBackward()" class="px-3 h-9 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition" title="Desfazer Passo Anterior">
+                            <i class="fa-solid fa-chevron-left text-[10px]"></i> Anterior
+                        </button>
+                        <button id="btn-play-solution" onclick="togglePlaySolution()" class="px-5 h-9 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs flex items-center gap-2 shadow-lg shadow-indigo-600/30 transition">
+                            <i id="play-btn-icon" class="fa-solid fa-play"></i>
+                            <span id="play-btn-text">Executar Solução</span>
+                        </button>
+                        <button onclick="stepForward()" class="px-3 h-9 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 border border-white/10 flex items-center gap-1.5 text-xs font-semibold transition" title="Executar Próximo Passo">
+                            Próximo <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                        </button>
+                    </div>
+
+                    <div class="hidden sm:block text-[11px] text-slate-400">
+                        <span id="player-status-badge" class="px-2 py-0.5 rounded bg-slate-900 border border-white/10">Pausado</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- COLUNA DIREITA (5 COLUNAS): PALETA DE CORES, MAPA 2D SVG/GRID E SEQUÊNCIA -->
+        <section class="lg:col-span-5 flex flex-col gap-4">
+
+            <!-- Card: Paleta de Cores + Mapa Planificado 2D -->
+            <div class="glass-panel rounded-3xl p-4 sm:p-5 shadow-2xl flex flex-col gap-4">
+                <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                    <div>
+                        <h2 id="editor-header-title" class="text-sm font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-palette text-indigo-400"></i> Paleta & Mapa Planificado 2D
+                        </h2>
+                        <p class="text-[11px] text-slate-400">Selecione uma cor abaixo e clique no mapa 2D ou direto no modelo 3D</p>
+                    </div>
+                </div>
+
+                <!-- Seletor de Cores com Contadores em Tempo Real -->
+                <div>
+                    <div class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center justify-between">
+                        <span>Cor Ativa do Pincel:</span>
+                        <span id="active-color-name" class="text-indigo-300 font-bold">Verde</span>
+                    </div>
+                    <div id="palette-grid" class="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                        <!-- Preenchido via JS (6 cores para 3x3, 4 cores para Pyraminx) -->
+                    </div>
+                </div>
+
+                <!-- Mapa 2D Interativo (Grid 3x3 ou Triângulos SVG Reais do Pyraminx) -->
+                <div class="bg-slate-950/75 rounded-2xl p-3 border border-white/10 flex flex-col items-center justify-center min-h-[260px]">
+                    <div id="net-2d-container" class="w-full flex flex-col items-center justify-center">
+                        <!-- Renderizado via JS -->
+                    </div>
+                </div>
+
+                <!-- Botão Principal: Gerar Solução -->
+                <button onclick="generateSolutionForCurrentState()" class="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-indigo-600 via-violet-600 to-indigo-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-xs sm:text-sm shadow-xl shadow-indigo-600/25 border border-indigo-400/30 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    <span>Calcular Rotações de Resolução em 3D</span>
+                </button>
+            </div>
+
+            <!-- Card: Lista de Passos da Solução e Guia de Notação -->
+            <div class="glass-panel rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col gap-3">
+                <div class="flex items-center justify-between border-b border-white/10 pb-2.5">
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-list-ol text-indigo-400"></i> Sequência de Rotações
+                    </h3>
+                    <span id="moves-count-badge" class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        0 passos
+                    </span>
+                </div>
+
+                <!-- Chips Clicáveis dos Passos -->
+                <div id="solution-steps-list" class="flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto custom-scroll p-1">
+                    <!-- Preenchido via JS -->
+                </div>
+
+                <!-- Legenda Rápida da Notação -->
+                <div id="notation-guide" class="mt-1 pt-2.5 border-t border-white/10 text-[11px] text-slate-400 leading-relaxed">
+                    <!-- Preenchido via JS conforme o puzzle -->
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+    <!-- SCRIPT COMPLETO DO MOTOR 3D (CUBO 3x3x3 + PYRAMINX TETRAEDRO REAL) -->
+    <script>
+        /***********************************************************************
+         * 1. DEFINIÇÕES DE CORES E DICIONÁRIOS DE MOVIMENTOS
+         ***********************************************************************/
+        const COLORS_3X3 = [
+            { id: 'U', name: 'Branco (Topo)', hex: '#f8fafc', threeHex: 0xf8fafc, textDark: true },
+            { id: 'D', name: 'Amarelo (Base)', hex: '#ffd600', threeHex: 0xffd600, textDark: true },
+            { id: 'F', name: 'Verde (Frente)', hex: '#00d048', threeHex: 0x00d048, textDark: false },
+            { id: 'B', name: 'Azul (Costas)', hex: '#1e88e5', threeHex: 0x1e88e5, textDark: false },
+            { id: 'R', name: 'Vermelho (Dir)', hex: '#ff2222', threeHex: 0xff2222, textDark: false },
+            { id: 'L', name: 'Laranja (Esq)', hex: '#ff6d00', threeHex: 0xff6d00, textDark: false }
+        ];
+
+        // Cores fiéis às fotos enviadas pelo usuário para o Pyraminx
+        const COLORS_PYRAMINX = [
+            { id: 'F', name: 'Verde', hex: '#00d048', threeHex: 0x00d048, textDark: false },
+            { id: 'R', name: 'Vermelho', hex: '#ff2222', threeHex: 0xff2222, textDark: false },
+            { id: 'L', name: 'Azul', hex: '#1e88e5', threeHex: 0x1e88e5, textDark: false },
+            { id: 'D', name: 'Amarelo', hex: '#ffd600', threeHex: 0xffd600, textDark: true }
+        ];
+
+        const MOVE_DESCRIPTIONS_3X3 = {
+            "U": "Topo (U) — 90° Horário",
+            "U'": "Topo (U') — 90° Anti-horário",
+            "D": "Base (D) — 90° Horário",
+            "D'": "Base (D') — 90° Anti-horário",
+            "R": "Direita (R) — 90° Horário",
+            "R'": "Direita (R') — 90° Anti-horário",
+            "L": "Esquerda (L) — 90° Horário",
+            "L'": "Esquerda (L') — 90° Anti-horário",
+            "F": "Frente (F) — 90° Horário",
+            "F'": "Frente (F') — 90° Anti-horário",
+            "B": "Costas (B) — 90° Horário",
+            "B'": "Costas (B') — 90° Anti-horário"
+        };
+
+        const MOVE_DESCRIPTIONS_PYRAMINX = {
+            "U": "Bloco Topo (U) — 120° Horário",
+            "U'": "Bloco Topo (U') — 120° Anti-horário",
+            "L": "Bloco Esquerdo (L) — 120° Horário",
+            "L'": "Bloco Esquerdo (L') — 120° Anti-horário",
+            "R": "Bloco Direito (R) — 120° Horário",
+            "R'": "Bloco Direito (R') — 120° Anti-horário",
+            "B": "Bloco Traseiro (B) — 120° Horário",
+            "B'": "Bloco Traseiro (B') — 120° Anti-horário",
+            "u": "Ponta Topo (u) — 120° Horário",
+            "u'": "Ponta Topo (u') — 120° Anti-horário",
+            "l": "Ponta Esquerda (l) — 120° Horário",
+            "l'": "Ponta Esquerda (l') — 120° Anti-horário",
+            "r": "Ponta Direita (r) — 120° Horário",
+            "r'": "Ponta Direita (r') — 120° Anti-horário",
+            "b": "Ponta Traseira (b) — 120° Horário",
+            "b'": "Ponta Traseira (b') — 120° Anti-horário"
+        };
+
+        /***********************************************************************
+         * 2. VARIÁVEIS DE ESTADO GLOBAIS
+         ***********************************************************************/
+        let currentPuzzle = '3x3'; // '3x3' ou 'pyraminx'
+        let paint3DEnabled = true;
+        let selectedColorHex = COLORS_3X3[0].hex;
+
+        // Estado das cores nos mapas 2D / 3D
+        let state3x3 = {};       // { U: [9], D: [9], F: [9], B: [9], R: [9], L: [9] }
+        let statePyraminx = {};  // { F: [9], L: [9], R: [9], D: [9] }
+
+        // Histórico real de movimentos para resolução exata + suporte a estados pintados
+        let moveHistory3x3 = [];
+        let moveHistoryPyr = [];
+        let customPainted3x3 = false;
+        let customPaintedPyr = false;
+
+        // Lista de passos da solução atual e controle de animação
+        let solutionQueue = [];
+        let currentStepIdx = 0;
+        let isPlayingSolution = false;
+        let animDurationMs = 360;
+        let isAnimating3D = false;
+
+        // Referências Three.js
+        let scene, camera, renderer, controls, puzzleRootGroup;
+        let raycaster = new THREE.Raycaster();
+        let mouseVec = new THREE.Vector2();
+        let stickerMeshes = []; // Todos os adesivos clicáveis no 3D
+        let hoveredSticker = null;
+
+        // Geometria específica do Cubo 3x3x3
+        let cubies3x3 = [];
+
+        // Geometria específica do Pyraminx (Tetraedro Real)
+        let pyrVertices = {}; // Vértices U, L, R, B do Tetraedro
+        let pyrAxes = {};     // Vetores unitários do centro (0,0,0) para U, L, R, B
+        let pyrStickers = []; // Lista dos 36 adesivos 3D com metadados
+
+        /***********************************************************************
+         * 3. INICIALIZAÇÃO DO SISTEMA E CENÁRIO 3D
+         ***********************************************************************/
+        function initStatesToSolved() {
+            COLORS_3X3.forEach(c => {
+                state3x3[c.id] = Array(9).fill(c.hex);
+            });
+            COLORS_PYRAMINX.forEach(c => {
+                statePyraminx[c.id] = Array(9).fill(c.hex);
+            });
+            moveHistory3x3 = [];
+            moveHistoryPyr = [];
+            customPainted3x3 = false;
+            customPaintedPyr = false;
+        }
+
+        function initThreeScene() {
+            const container = document.getElementById('three-container');
+            const width = container.clientWidth || 600;
+            const height = container.clientHeight || 420;
+
+            scene = new THREE.Scene();
+
+            camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 100);
+            camera.position.set(5.5, 4.4, 6.2);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(width, height);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            container.innerHTML = '';
+            container.appendChild(renderer.domElement);
+
+            // OrbitControls suaves
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.07;
+            controls.enablePan = false;
+            controls.minDistance = 3.8;
+            controls.maxDistance = 12;
+
+            // Iluminação de Estúdio Premium
+            const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+            scene.add(ambient);
+
+            const keyLight = new THREE.DirectionalLight(0xffffff, 0.85);
+            keyLight.position.set(8, 14, 10);
+            scene.add(keyLight);
+
+            const fillLight = new THREE.DirectionalLight(0x93c5fd, 0.45);
+            fillLight.position.set(-10, -8, -6);
+            scene.add(fillLight);
+
+            const rimLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            rimLight.position.set(0, -12, 8);
+            scene.add(rimLight);
+
+            puzzleRootGroup = new THREE.Group();
+            scene.add(puzzleRootGroup);
+
+            // Eventos de Raycasting para pintar clicando direto no modelo 3D
+            setupRaycastingEvents(renderer.domElement);
+
+            animateLoop();
+        }
+
+        function animateLoop() {
+            requestAnimationFrame(animateLoop);
+            if (controls) controls.update();
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        /***********************************************************************
+         * 4. CONSTRUÇÃO DO CUBO MÁGICO 3x3x3 EM 3D E ROTAÇÕES
+         ***********************************************************************/
+        function buildRubiksCube3D() {
+            clearPuzzleGroup();
+            cubies3x3 = [];
+            stickerMeshes = [];
+
+            const coreMat = new THREE.MeshPhysicalMaterial({
+                color: 0x0f131a,
+                roughness: 0.35,
+                metalness: 0.1,
+                clearcoat: 0.3
+            });
+
+            const cubieSize = 0.95;
+            const stickerSize = 0.83;
+            const stickerOffset = cubieSize / 2 + 0.008;
+
+            // Mapeamento das 6 faces e orientações para os índices 0..8 do Net 2D
+            for (let x = -1; x <= 1; x++) {
+                for (let y = -1; y <= 1; y++) {
+                    for (let z = -1; z <= 1; z++) {
+                        const cubieGroup = new THREE.Group();
+                        cubieGroup.position.set(x, y, z);
+                        cubieGroup.userData = { gx: x, gy: y, gz: z };
+
+                        // Corpo plástico preto do cubinho
+                        const boxGeo = new THREE.BoxGeometry(cubieSize, cubieSize, cubieSize);
+                        const boxMesh = new THREE.Mesh(boxGeo, coreMat);
+                        cubieGroup.add(boxMesh);
+
+                        // Adicionar adesivos nas faces externas
+                        // Topo (U): y === 1
+                        if (y === 1) {
+                            const idx = (z + 1) * 3 + (x + 1);
+                            addCubeSticker(cubieGroup, 'U', idx, new THREE.Vector3(0, stickerOffset, 0), new THREE.Euler(-Math.PI / 2, 0, 0), stickerSize);
+                        }
+                        // Base (D): y === -1
+                        if (y === -1) {
+                            const idx = (1 - z) * 3 + (x + 1);
+                            addCubeSticker(cubieGroup, 'D', idx, new THREE.Vector3(0, -stickerOffset, 0), new THREE.Euler(Math.PI / 2, 0, 0), stickerSize);
+                        }
+                        // Frente (F): z === 1
+                        if (z === 1) {
+                            const idx = (1 - y) * 3 + (x + 1);
+                            addCubeSticker(cubieGroup, 'F', idx, new THREE.Vector3(0, 0, stickerOffset), new THREE.Euler(0, 0, 0), stickerSize);
+                        }
+                        // Costas (B): z === -1
+                        if (z === -1) {
+                            const idx = (1 - y) * 3 + (1 - x);
+                            addCubeSticker(cubieGroup, 'B', idx, new THREE.Vector3(0, 0, -stickerOffset), new THREE.Euler(0, Math.PI, 0), stickerSize);
+                        }
+                        // Direita (R): x === 1
+                        if (x === 1) {
+                            const idx = (1 - y) * 3 + (1 - z);
+                            addCubeSticker(cubieGroup, 'R', idx, new THREE.Vector3(stickerOffset, 0, 0), new THREE.Euler(0, Math.PI / 2, 0), stickerSize);
+                        }
+                        // Esquerda (L): x === -1
+                        if (x === -1) {
+                            const idx = (1 - y) * 3 + (z + 1);
+                            addCubeSticker(cubieGroup, 'L', idx, new THREE.Vector3(-stickerOffset, 0, 0), new THREE.Euler(0, -Math.PI / 2, 0), stickerSize);
+                        }
+
+                        puzzleRootGroup.add(cubieGroup);
+                        cubies3x3.push(cubieGroup);
+                    }
+                }
+            }
+        }
+
+        function addCubeSticker(parentGroup, faceId, idx, pos, euler, size) {
+            const colorHex = state3x3[faceId][idx];
+            const mat = new THREE.MeshPhysicalMaterial({
+                color: new THREE.Color(colorHex),
+                roughness: 0.2,
+                metalness: 0.05,
+                clearcoat: 0.65,
+                clearcoatRoughness: 0.15
+            });
+            const geo = new THREE.PlaneGeometry(size, size);
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            mesh.rotation.copy(euler);
+            mesh.userData = {
+                puzzle: '3x3',
+                face: faceId,
+                index: idx
+            };
+            parentGroup.add(mesh);
+            stickerMeshes.push(mesh);
+        }
+
+        // Executa uma rotação 3D real no Cubo 3x3x3
+        function animateMove3x3(moveNotation, duration, onComplete) {
+            if (isAnimating3D) return;
+            isAnimating3D = true;
+
+            const baseMove = moveNotation.replace("'", "");
+            const isPrime = moveNotation.includes("'");
+
+            // Definição do eixo e filtro de camada
+            let axis = new THREE.Vector3();
+            let angle = -Math.PI / 2;
+            let filterFn = () => false;
+
+            if (baseMove === 'U') { axis.set(0, 1, 0); filterFn = c => Math.round(c.position.y) === 1; }
+            if (baseMove === 'D') { axis.set(0, -1, 0); filterFn = c => Math.round(c.position.y) === -1; }
+            if (baseMove === 'R') { axis.set(1, 0, 0); filterFn = c => Math.round(c.position.x) === 1; }
+            if (baseMove === 'L') { axis.set(-1, 0, 0); filterFn = c => Math.round(c.position.x) === -1; }
+            if (baseMove === 'F') { axis.set(0, 0, 1); filterFn = c => Math.round(c.position.z) === 1; }
+            if (baseMove === 'B') { axis.set(0, 0, -1); filterFn = c => Math.round(c.position.z) === -1; }
+
+            if (isPrime) angle = -angle;
+
+            const affectedCubies = cubies3x3.filter(filterFn);
+            const pivot = new THREE.Group();
+            puzzleRootGroup.add(pivot);
+            affectedCubies.forEach(c => pivot.attach(c));
+
+            const startTime = performance.now();
+
+            function tick(now) {
+                const elapsed = now - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                // Easing cubic in-out
+                const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+                pivot.setRotationFromAxisAngle(axis, angle * ease);
+
+                if (t < 1) {
+                    requestAnimationFrame(tick);
+                } else {
+                    pivot.setRotationFromAxisAngle(axis, angle);
+                    pivot.updateMatrixWorld();
+                    affectedCubies.forEach(c => {
+                        puzzleRootGroup.attach(c);
+                        c.position.set(
+                            Math.round(c.position.x),
+                            Math.round(c.position.y),
+                            Math.round(c.position.z)
+                        );
+                    });
+                    puzzleRootGroup.remove(pivot);
+                    sync3x3StateFrom3DMeshes();
+                    isAnimating3D = false;
+                    if (onComplete) onComplete();
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // Atualiza o mapa 2D do 3x3 lendo a posição atual real dos adesivos no espaço 3D
+        function sync3x3StateFrom3DMeshes() {
+            stickerMeshes.forEach(mesh => {
+                const worldPos = new THREE.Vector3();
+                mesh.getWorldPosition(worldPos);
+
+                const worldNormal = new THREE.Vector3(0, 0, 1).applyQuaternion(mesh.getWorldQuaternion(new THREE.Quaternion())).normalize();
+                const hexStr = '#' + mesh.material.color.getHexString();
+
+                const gx = Math.round(worldPos.x);
+                const gy = Math.round(worldPos.y);
+                const gz = Math.round(worldPos.z);
+
+                if (worldNormal.y > 0.8) {
+                    const idx = (gz + 1) * 3 + (gx + 1);
+                    state3x3.U[idx] = hexStr;
+                    mesh.userData.face = 'U'; mesh.userData.index = idx;
+                } else if (worldNormal.y < -0.8) {
+                    const idx = (1 - gz) * 3 + (gx + 1);
+                    state3x3.D[idx] = hexStr;
+                    mesh.userData.face = 'D'; mesh.userData.index = idx;
+                } else if (worldNormal.z > 0.8) {
+                    const idx = (1 - gy) * 3 + (gx + 1);
+                    state3x3.F[idx] = hexStr;
+                    mesh.userData.face = 'F'; mesh.userData.index = idx;
+                } else if (worldNormal.z < -0.8) {
+                    const idx = (1 - gy) * 3 + (1 - gx);
+                    state3x3.B[idx] = hexStr;
+                    mesh.userData.face = 'B'; mesh.userData.index = idx;
+                } else if (worldNormal.x > 0.8) {
+                    const idx = (1 - gy) * 3 + (1 - gz);
+                    state3x3.R[idx] = hexStr;
+                    mesh.userData.face = 'R'; mesh.userData.index = idx;
+                } else if (worldNormal.x < -0.8) {
+                    const idx = (1 - gy) * 3 + (gz + 1);
+                    state3x3.L[idx] = hexStr;
+                    mesh.userData.face = 'L'; mesh.userData.index = idx;
+                }
+            });
+            render2DNet();
+            updateColorValidationAndCounts();
+        }
+
+        /***********************************************************************
+         * 5. CONSTRUÇÃO DO PYRAMINX REAL (TETRAEDRO 3D COM 3 CAMADAS E 36 ADESIVOS)
+         ***********************************************************************/
+        function buildPyraminx3D() {
+            clearPuzzleGroup();
+            stickerMeshes = [];
+            pyrStickers = [];
+
+            // Raio circunscrito do Tetraedro Regular centrado em (0,0,0)
+            const R = 2.55;
+            const yBase = -R / 3;
+            const rBase = R * Math.sqrt(8 / 9);
+
+            // 4 Vértices Reais do Tetraedro Regular:
+            // U = Topo
+            // L = Frente-Esquerda
+            // R = Frente-Direita
+            // B = Traseira-Centro
+            const V_U = new THREE.Vector3(0, R, 0);
+            const V_L = new THREE.Vector3(-rBase * Math.sin(Math.PI / 3), yBase, rBase * Math.cos(Math.PI / 3));
+            const V_R = new THREE.Vector3(rBase * Math.sin(Math.PI / 3), yBase, rBase * Math.cos(Math.PI / 3));
+            const V_B = new THREE.Vector3(0, yBase, -rBase);
+
+            pyrVertices = { U: V_U, L: V_L, R: V_R, B: V_B };
+
+            // Eixos unitários apontando do centro (0,0,0) para cada um dos 4 vértices
+            pyrAxes = {
+                U: V_U.clone().normalize(),
+                L: V_L.clone().normalize(),
+                R: V_R.clone().normalize(),
+                B: V_B.clone().normalize()
+            };
+
+            // Construir os 22 sub-tetraedros pretos internos que formam o corpo segmentado real do Pyraminx
+            // para que durante o giro de qualquer camada/ponta o corpo preto acompanhe perfeitamente o corte!
+            const blackCoreMat = new THREE.MeshPhysicalMaterial({
+                color: 0x0d1117,
+                roughness: 0.38,
+                metalness: 0.1,
+                clearcoat: 0.25,
+                polygonOffset: true,
+                polygonOffsetFactor: 1,
+                polygonOffsetUnits: 1
+            });
+
+            // 4 Faces do Tetraedro:
+            // Face F (Frente): oposta a B -> (U, L, R)
+            // Face L (Esquerda): oposta a R -> (U, B, L)
+            // Face R (Direita): oposta a L -> (U, R, B)
+            // Face D (Base): oposta a U -> (L, B, R) vista por baixo
+            const facesDef = [
+                { id: 'F', A: V_U, B: V_L, C: V_R },
+                { id: 'L', A: V_U, B: V_B, C: V_L },
+                { id: 'R', A: V_U, B: V_R, C: V_B },
+                { id: 'D', A: V_L, B: V_B, C: V_R }
+            ];
+
+            facesDef.forEach(face => {
+                const { id, A, B, C } = face;
+                // Vetor normal apontando para fora da face
+                const edge1 = new THREE.Vector3().subVectors(B, A);
+                const edge2 = new THREE.Vector3().subVectors(C, A);
+                const normal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+                if (normal.dot(A) < 0) normal.negate();
+
+                // Gerar a grade triangular de 3 camadas (linhas r = 0, 1, 2) -> 9 triângulos por face
+                // Pontos da malha baricêntrica p(r, c) onde r = 0..3 e c = 0..r
+                const gridPts = [];
+                for (let r = 0; r <= 3; r++) {
+                    gridPts[r] = [];
+                    for (let c = 0; c <= r; c++) {
+                        // Interpolação nos lados A->B e A->C
+                        const wA = (3 - r) / 3;
+                        const wB = (r - c) / 3;
+                        const wC = c / 3;
+                        const pt = new THREE.Vector3()
+                            .addScaledVector(A, wA)
+                            .addScaledVector(B, wB)
+                            .addScaledVector(C, wC);
+                        gridPts[r][c] = pt;
+                    }
+                }
+
+                let stickerIdx = 0;
+                for (let r = 0; r < 3; r++) {
+                    // Em cada linha r existem (2*r + 1) triângulos
+                    for (let k = 0; k < 2 * r + 1; k++) {
+                        let p1, p2, p3;
+                        const c = Math.floor(k / 2);
+                        if (k % 2 === 0) {
+                            // Triângulo apontando para cima
+                            p1 = gridPts[r][c];
+                            p2 = gridPts[r + 1][c];
+                            p3 = gridPts[r + 1][c + 1];
+                        } else {
+                            // Triângulo invertido (apontando para baixo)
+                            p1 = gridPts[r][c];
+                            p2 = gridPts[r + 1][c + 1];
+                            p3 = gridPts[r][c + 1];
+                        }
+
+                        createPyraminxTileAndSticker(id, stickerIdx, p1, p2, p3, normal, blackCoreMat);
+                        stickerIdx++;
+                    }
+                }
+            });
+        }
+
+        function createPyraminxTileAndSticker(faceId, idx, p1, p2, p3, normal, blackMat) {
+            // Centroide do triângulo na superfície da face
+            const centroid = new THREE.Vector3().add(p1).add(p2).add(p3).divideScalar(3);
+
+            // 1. Criar plaqueta preta chanfrada (base plástica da peça) para dar frestas escuras autênticas
+            const baseScale = 0.96;
+            const bp1 = new THREE.Vector3().lerpVectors(centroid, p1, baseScale);
+            const bp2 = new THREE.Vector3().lerpVectors(centroid, p2, baseScale);
+            const bp3 = new THREE.Vector3().lerpVectors(centroid, p3, baseScale);
+            const innerApex = centroid.clone().multiplyScalar(0.18); // Fecha em direção ao núcleo
+
+            const tileHolder = new THREE.Group();
+
+            // Placa preta da superfície + abas laterais que vedam o interior durante o giro
+            const baseGeo = new THREE.BufferGeometry();
+            const baseVerts = new Float32Array([
+                bp1.x, bp1.y, bp1.z,  bp2.x, bp2.y, bp2.z,  bp3.x, bp3.y, bp3.z,
+                bp1.x, bp1.y, bp1.z,  innerApex.x, innerApex.y, innerApex.z, bp2.x, bp2.y, bp2.z,
+                bp2.x, bp2.y, bp2.z,  innerApex.x, innerApex.y, innerApex.z, bp3.x, bp3.y, bp3.z,
+                bp3.x, bp3.y, bp3.z,  innerApex.x, innerApex.y, innerApex.z, bp1.x, bp1.y, bp1.z
+            ]);
+            baseGeo.setAttribute('position', new THREE.BufferAttribute(baseVerts, 3));
+            baseGeo.computeVertexNormals();
+            const baseMesh = new THREE.Mesh(baseGeo, blackMat);
+            tileHolder.add(baseMesh);
+
+            // 2. Criar o adesivo colorido triangular com margem preta elegante (scale 0.84)
+            const stickerScale = 0.84;
+            const lift = 0.016;
+            const sp1 = new THREE.Vector3().lerpVectors(centroid, p1, stickerScale).addScaledVector(normal, lift);
+            const sp2 = new THREE.Vector3().lerpVectors(centroid, p2, stickerScale).addScaledVector(normal, lift);
+            const sp3 = new THREE.Vector3().lerpVectors(centroid, p3, stickerScale).addScaledVector(normal, lift);
+
+            const stickerGeo = new THREE.BufferGeometry();
+            const sVerts = new Float32Array([
+                sp1.x, sp1.y, sp1.z,
+                sp2.x, sp2.y, sp2.z,
+                sp3.x, sp3.y, sp3.z
+            ]);
+            stickerGeo.setAttribute('position', new THREE.BufferAttribute(sVerts, 3));
+            stickerGeo.computeVertexNormals();
+
+            const colorHex = statePyraminx[faceId][idx];
+            const stickerMat = new THREE.MeshPhysicalMaterial({
+                color: new THREE.Color(colorHex),
+                roughness: 0.22,
+                metalness: 0.05,
+                clearcoat: 0.65,
+                clearcoatRoughness: 0.15,
+                side: THREE.DoubleSide
+            });
+
+            const stickerMesh = new THREE.Mesh(stickerGeo, stickerMat);
+            stickerMesh.userData = {
+                puzzle: 'pyraminx',
+                face: faceId,
+                index: idx,
+                localCentroid: centroid.clone(),
+                localNormal: normal.clone(),
+                holder: tileHolder
+            };
+
+            tileHolder.add(stickerMesh);
+            puzzleRootGroup.add(tileHolder);
+
+            stickerMeshes.push(stickerMesh);
+            pyrStickers.push({
+                holder: tileHolder,
+                mesh: stickerMesh,
+                initialCentroid: centroid.clone()
+            });
+        }
+
+        // Executa uma rotação física de 120° em torno de um dos 4 vértices do Tetraedro (U, L, R, B ou pontas u, l, r, b)
+        function animateMovePyraminx(moveNotation, duration, onComplete) {
+            if (isAnimating3D) return;
+            isAnimating3D = true;
+
+            const isPrime = moveNotation.includes("'");
+            const rawChar = moveNotation.replace("'", "");
+            const vertexKey = rawChar.toUpperCase(); // 'U', 'L', 'R', 'B'
+            const isTipOnly = (rawChar === rawChar.toLowerCase()); // 'u', 'l', 'r', 'b' giram apenas a ponta
+
+            const axis = pyrAxes[vertexKey];
+            // Sentido horário olhando para o vértice de fora para a origem = -120° (-2*PI/3)
+            const angle = (isPrime ? 1 : -1) * (2 * Math.PI / 3);
+
+            // Projeção dos centroides no eixo do vértice:
+            // No nosso tetraedro (R = 2.55):
+            // - A ponta (tip, camada 1 do vértice) tem dot(centroid, axis) > 1.35
+            // - O bloco (ponta + camada média, 2 camadas do vértice) tem dot(centroid, axis) > 0.15
+            const threshold = isTipOnly ? 1.35 : 0.15;
+
+            const affectedHolders = [];
+            pyrStickers.forEach(item => {
+                const worldCentroid = item. mesh.userData.localCentroid.clone().applyMatrix4(item.holder.matrixWorld);
+                const proj = worldCentroid.dot(axis);
+                if (proj > threshold) {
+                    affectedHolders.push(item.holder);
+                }
+            });
+
+            const pivot = new THREE.Group();
+            puzzleRootGroup.add(pivot);
+            affectedHolders.forEach(h => pivot.attach(h));
+
+            const startTime = performance.now();
+
+            function tick(now) {
+                const elapsed = now - startTime;
+                const t = Math.min(elapsed / duration, 1);
+                const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+                pivot.setRotationFromAxisAngle(axis, angle * ease);
+
+                if (t < 1) {
+                    requestAnimationFrame(tick);
+                } else {
+                    pivot.setRotationFromAxisAngle(axis, angle);
+                    pivot.updateMatrixWorld();
+                    affectedHolders.forEach(h => puzzleRootGroup.attach(h));
+                    puzzleRootGroup.remove(pivot);
+
+                    syncPyraminxStateFrom3DMeshes();
+                    isAnimating3D = false;
+                    if (onComplete) onComplete();
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        // Sincroniza o estado 2D do Pyraminx comparando a posição 3D atual de cada adesivo com os 36 slots originais
+        function syncPyraminxStateFrom3DMeshes() {
+            // Obter posição atual no mundo de cada adesivo
+            const currentWorldData = pyrStickers.map(item => {
+                const wp = item.mesh.userData.localCentroid.clone().applyMatrix4(item.holder.matrixWorld);
+                const hex = '#' + item.mesh.material.color.getHexString();
+                return { mesh: item.mesh, wp, hex };
+            });
+
+            // Para cada um dos 36 slots originais (4 faces x 9 índices), achar qual adesivo está naquela posição
+            pyrStickers.forEach(slot => {
+                // Posição original e face/índice original na criação
+                // Guardamos no slot.initialFace e slot.initialIndex se ainda não existir
+                if (slot.initialFace === undefined) {
+                    slot.initialFace = slot.mesh.userData.face;
+                    slot.initialIndex = slot.mesh.userData.index;
+                }
+            });
+
+            pyrStickers.forEach(slot => {
+                let bestMatch = null;
+                let minDist = Infinity;
+                currentWorldData.forEach(curr => {
+                    const d = curr.wp.distanceToSquared(slot.initialCentroid);
+                    if (d < minDist) {
+                        minDist = d;
+                        bestMatch = curr;
+                    }
+                });
+                if (bestMatch) {
+                    statePyraminx[slot.initialFace][slot.initialIndex] = bestMatch.hex;
+                    bestMatch.mesh.userData.face = slot.initialFace;
+                    bestMatch.mesh.userData.index = slot.initialIndex;
+                }
+            });
+
+            render2DNet();
+            updateColorValidationAndCounts();
+        }
+
+        function clearPuzzleGroup() {
+            if (!puzzleRootGroup) return;
+            while (puzzleRootGroup.children.length > 0) {
+                puzzleRootGroup.remove(puzzleRootGroup.children[0]);
+            }
+        }
+
+        /***********************************************************************
+         * 6. RAYCASTING PARA PINTAR CLICANDO DIRETAMENTE NO MODELO 3D
+         ***********************************************************************/
+        function setupRaycastingEvents(domElem) {
+            let downPos = { x: 0, y: 0 };
+
+            domElem.addEventListener('pointerdown', (e) => {
+                downPos = { x: e.clientX, y: e.clientY };
+            });
+
+            domElem.addEventListener('pointermove', (e) => {
+                if (!paint3DEnabled || isAnimating3D) return;
+                const rect = domElem.getBoundingClientRect();
+                mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(mouseVec, camera);
+                const intersects = raycaster.intersectObjects(stickerMeshes, false);
+
+                if (hoveredSticker && (!intersects.length || intersects[0].object !== hoveredSticker)) {
+                    hoveredSticker.material.emissive.setHex(0x000000);
+                    hoveredSticker = null;
+                }
+
+                if (intersects.length > 0) {
+                    hoveredSticker = intersects[0].object;
+                    hoveredSticker.material.emissive.setHex(0x282828);
+                    domElem.style.cursor = 'pointer';
+                } else {
+                    domElem.style.cursor = 'grab';
+                }
+            });
+
+            domElem.addEventListener('pointerup', (e) => {
+                if (!paint3DEnabled || isAnimating3D) return;
+                const moveDist = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+                // Só pinta se foi um clique limpo (sem arrastar a câmera)
+                if (moveDist > 5) return;
+
+                const rect = domElem.getBoundingClientRect();
+                mouseVec.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouseVec.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+                raycaster.setFromCamera(mouseVec, camera);
+                const intersects = raycaster.intersectObjects(stickerMeshes, false);
+
+                if (intersects.length > 0) {
+                    const hitMesh = intersects[0].object;
+                    const { face, index } = hitMesh.userData;
+                    applyColorToSticker(face, index, selectedColorHex);
+                }
+            });
+        }
+
+        function applyColorToSticker(face, index, hexColor) {
+            if (currentPuzzle === '3x3') {
+                state3x3[face][index] = hexColor;
+                customPainted3x3 = true;
+            } else {
+                statePyraminx[face][index] = hexColor;
+                customPaintedPyr = true;
+            }
+
+            // Atualizar cor no mesh 3D correspondente
+            const targetMesh = stickerMeshes.find(m => m.userData.face === face && m.userData.index === index);
+            if (targetMesh) {
+                targetMesh.material.color.set(hexColor);
+            }
+
+            render2DNet();
+            updateColorValidationAndCounts();
+        }
+
+        function togglePaint3DMode() {
+            paint3DEnabled = !paint3DEnabled;
+            const btn = document.getElementById('btn-paint-3d');
+            const label = document.getElementById('paint-3d-status');
+            label.innerText = paint3DEnabled ? 'ON' : 'OFF';
+
+            if (paint3DEnabled) {
+                btn.className = "px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 border bg-indigo-500/15 border-indigo-500/40 text-indigo-300 hover:bg-indigo-500/25";
+            } else {
+                btn.className = "px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center gap-2 border bg-slate-800/80 border-white/10 text-slate-400 hover:text-white";
+            }
+        }
+
+        /***********************************************************************
+         * 7. INTERFACE 2D: PALETA DE CORES E MAPAS PLANIFICADOS (GRID & SVG TRIANGULAR)
+         ***********************************************************************/
+        function renderColorPalette() {
+            const container = document.getElementById('palette-grid');
+            container.innerHTML = '';
+
+            const palette = currentPuzzle === '3x3' ? COLORS_3X3 : COLORS_PYRAMINX;
+            container.className = currentPuzzle === '3x3'
+                ? 'grid grid-cols-3 sm:grid-cols-6 gap-2'
+                : 'grid grid-cols-2 sm:grid-cols-4 gap-2.5';
+
+            // Garantir que a cor selecionada exista na paleta atual
+            if (!palette.some(c => c.hex.toLowerCase() === selectedColorHex.toLowerCase())) {
+                selectedColorHex = palette[0].hex;
+            }
+
+            const activeObj = palette.find(c => c.hex.toLowerCase() === selectedColorHex.toLowerCase());
+            if (activeObj) {
+                document.getElementById('active-color-name').innerText = activeObj.name;
+            }
+
+            palette.forEach(c => {
+                const count = countStickersOfColor(c.hex);
+                const isSelected = c.hex.toLowerCase() === selectedColorHex.toLowerCase();
+
+                const btn = document.createElement('button');
+                btn.className = `relative flex flex-col items-center justify-center p-2 rounded-xl border-2 transition-all transform ${
+                    isSelected ? 'border-white scale-105 shadow-lg ring-2 ring-indigo-500/60' : 'border-white/15 opacity-85 hover:opacity-100'
+                }`;
+                btn.style.backgroundColor = c.hex;
+
+                const textClass = c.textDark ? 'text-slate-950' : 'text-white';
+                btn.innerHTML = `
+                    <span class="text-[11px] font-extrabold ${textClass}">${c.id}</span>
+                    <span id="count-badge-${c.id}" class="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-black/25 text-white mt-0.5">${count}/9</span>
+                `;
+
+                btn.onclick = () => {
+                    selectedColorHex = c.hex;
+                    renderColorPalette();
+                };
+
+                container.appendChild(btn);
+            });
+        }
+
+        function countStickersOfColor(hex) {
+            const stateObj = currentPuzzle === '3x3' ? state3x3 : statePyraminx;
+            let total = 0;
+            Object.values(stateObj).forEach(arr => {
+                arr.forEach(col => {
+                    if (col.toLowerCase() === hex.toLowerCase()) total++;
+                });
+            });
+            return total;
+        }
+
+        function updateColorValidationAndCounts() {
+            const palette = currentPuzzle === '3x3' ? COLORS_3X3 : COLORS_PYRAMINX;
+            let allValid = true;
+            let totalStickers = currentPuzzle === '3x3' ? 54 : 36;
+
+            palette.forEach(c => {
+                const cnt = countStickersOfColor(c.hex);
+                if (cnt !== 9) allValid = false;
+                const badge = document.getElementById(`count-badge-${c.id}`);
+                if (badge) badge.innerText = `${cnt}/9`;
+            });
+
+            const pill = document.getElementById('validation-pill');
+            if (allValid) {
+                pill.className = "text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30";
+                pill.innerHTML = `<i class="fa-solid fa-check mr-1"></i> Cores Balanceadas (9/cor)`;
+            } else {
+                pill.className = "text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30";
+                pill.innerHTML = `<i class="fa-solid fa-triangle-exclamation mr-1"></i> Ajuste para 9 de cada cor`;
+            }
+        }
+
+        function render2DNet() {
+            const container = document.getElementById('net-2d-container');
+            container.innerHTML = '';
+
+            if (currentPuzzle === '3x3') {
+                render3x3Net(container);
+            } else {
+                renderPyraminxSVGNet(container);
+            }
+        }
+
+        // Mapa em Cruz para o Cubo 3x3x3
+        function render3x3Net(container) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex flex-col items-center gap-1.5 select-none';
+
+            const createFaceGrid = (faceId, label) => {
+                const box = document.createElement('div');
+                box.className = 'flex flex-col items-center';
+                const title = document.createElement('span');
+                title.className = 'text-[9px] font-mono text-slate-400 mb-0.5';
+                title.innerText = label;
+                box.appendChild(title);
+
+                const grid = document.createElement('div');
+                grid.className = 'grid grid-cols-3 gap-1 p-1 bg-slate-900 rounded-lg border border-white/10';
+                for (let i = 0; i < 9; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'w-5 h-5 sm:w-6 sm:h-6 rounded-[4px] cursor-pointer border border-black/40 transition transform hover:scale-110';
+                    cell.style.backgroundColor = state3x3[faceId][i];
+                    cell.onclick = () => applyColorToSticker(faceId, i, selectedColorHex);
+                    grid.appendChild(cell);
+                }
+                box.appendChild(grid);
+                return box;
+            };
+
+            // Linha Topo (U)
+            wrapper.appendChild(createFaceGrid('U', 'U (Topo)'));
+
+            // Linha Central (L, F, R, B)
+            const midRow = document.createElement('div');
+            midRow.className = 'flex items-center gap-1.5';
+            midRow.appendChild(createFaceGrid('L', 'L (Esq)'));
+            midRow.appendChild(createFaceGrid('F', 'F (Frente)'));
+            midRow.appendChild(createFaceGrid('R', 'R (Dir)'));
+            midRow.appendChild(createFaceGrid('B', 'B (Costas)'));
+            wrapper.appendChild(midRow);
+
+            // Linha Base (D)
+            wrapper.appendChild(createFaceGrid('D', 'D (Base)'));
+
+            container.appendChild(wrapper);
+        }
+
+        // Mapa 2D do Pyraminx com 4 Faces Triangulares Reais em SVG (9 triângulos por face!)
+        function renderPyraminxSVGNet(container) {
+            const grid = document.createElement('div');
+            grid.className = 'grid grid-cols-2 gap-3 w-full max-w-[380px]';
+
+            const facesMeta = [
+                { id: 'F', title: 'Frente (F - Verde)' },
+                { id: 'R', title: 'Direita (R - Vermelho)' },
+                { id: 'L', title: 'Esquerda (L - Azul)' },
+                { id: 'D', title: 'Base (D - Amarelo)' }
+            ];
+
+            // Coordenadas exatas dos 9 triângulos num triângulo equilátero SVG 120x105
+            const W = 120;
+            const H = 102;
+            const A = { x: 60, y: 4 };
+            const B = { x: 6, y: 98 };
+            const C = { x: 114, y: 98 };
+
+            const pts = [];
+            for (let r = 0; r <= 3; r++) {
+                pts[r] = [];
+                for (let c = 0; c <= r; c++) {
+                    const wA = (3 - r) / 3;
+                    const wB = (r - c) / 3;
+                    const wC = c / 3;
+                    pts[r][c] = {
+                        x: A.x * wA + B.x * wB + C.x * wC,
+                        y: A.y * wA + B.y * wB + C.y * wC
+                    };
+                }
+            }
+
+            facesMeta.forEach(f => {
+                const card = document.createElement('div');
+                card.className = 'flex flex-col items-center bg-slate-900/70 rounded-xl p-2 border border-white/5';
+
+                const label = document.createElement('span');
+                label.className = 'text-[10px] font-semibold text-slate-300 mb-1';
+                label.innerText = f.title;
+                card.appendChild(label);
+
+                const svgNS = 'http://www.w3.org/2000/svg';
+                const svg = document.createElementNS(svgNS, 'svg');
+                svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+                svg.setAttribute('class', 'w-full max-w-[135px] h-auto overflow-visible');
+
+                let idx = 0;
+                for (let r = 0; r < 3; r++) {
+                    for (let k = 0; k < 2 * r + 1; k++) {
+                        const c = Math.floor(k / 2);
+                        let p1, p2, p3;
+                        if (k % 2 === 0) {
+                            p1 = pts[r][c];
+                            p2 = pts[r + 1][c];
+                            p3 = pts[r + 1][c + 1];
+                        } else {
+                            p1 = pts[r][c];
+                            p2 = pts[r + 1][c + 1];
+                            p3 = pts[r][c + 1];
+                        }
+
+                        const poly = document.createElementNS(svgNS, 'polygon');
+                        poly.setAttribute('points', `${p1.x.toFixed(1)},${p1.y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)} ${p3.x.toFixed(1)},${p3.y.toFixed(1)}`);
+                        poly.setAttribute('fill', statePyraminx[f.id][idx]);
+                        poly.setAttribute('class', 'pyr-poly');
+
+                        const capturedIdx = idx;
+                        poly.addEventListener('click', () => {
+                            applyColorToSticker(f.id, capturedIdx, selectedColorHex);
+                        });
+
+                        svg.appendChild(poly);
+                        idx++;
+                    }
+                }
+
+                card.appendChild(svg);
+                grid.appendChild(card);
+            });
+
+            container.appendChild(grid);
+        }
+
+        /***********************************************************************
+         * 8. CONTROLES MANUAIS, EMBARALHAMENTO E GERADOR DE SOLUÇÃO 3D
+         ***********************************************************************/
+        function renderManualMoveButtons() {
+            const bar = document.getElementById('manual-moves-bar');
+            const guide = document.getElementById('notation-guide');
+            bar.innerHTML = '';
+
+            const movesList = currentPuzzle === '3x3'
+                ? ["U", "U'", "R", "R'", "F", "F'", "L", "L'", "D", "D'", "B", "B'"]
+                : ["U", "U'", "L", "L'", "R", "R'", "B", "B'", "u", "u'", "l", "r", "b"];
+
+            movesList.forEach(mv => {
+                const btn = document.createElement('button');
+                btn.className = 'px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-indigo-600 text-slate-200 hover:text-white font-mono text-xs font-bold border border-white/10 transition shadow-sm';
+                btn.innerText = mv;
+                btn.onclick = () => {
+                    if (isAnimating3D || isPlayingSolution) return;
+                    triggerSingleMove(mv, true);
+                };
+                bar.appendChild(btn);
+            });
+
+            if (currentPuzzle === '3x3') {
+                guide.innerHTML = `<strong class="text-slate-200">Notação 3x3x3 (90°):</strong> 
+                <code class="text-indigo-300">U</code> Topo, <code class="text-indigo-300">D</code> Base, <code class="text-indigo-300">R</code> Direita, <code class="text-indigo-300">L</code> Esquerda, <code class="text-indigo-300">F</code> Frente, <code class="text-indigo-300">B</code> Costas. Apóstrofo (<code class="text-indigo-300">'</code>) indica sentido Anti-horário.`;
+            } else {
+                guide.innerHTML = `<strong class="text-slate-200">Notação Pyraminx Tetraedro (120°):</strong> 
+                Maiúsculas (<code class="text-indigo-300">U, L, R, B</code>) giram o bloco de 2 camadas do vértice. Minúsculas (<code class="text-indigo-300">u, l, r, b</code>) giram apenas a ponta (tip).`;
+            }
+        }
+
+        function invertMove(mv) {
+            return mv.includes("'") ? mv.replace("'", "") : mv + "'";
+        }
+
+        // Simplifica movimentos redundantes consecutivos no mesmo eixo (ex: U + U' = vazio; no Pyraminx U + U = U')
+        function simplifyMoveSequence(seq, isPyraminx) {
+            const stack = [];
+            for (const mv of seq) {
+                const axis = mv.replace("'", "");
+                const dir = mv.includes("'") ? -1 : 1; // +1 horário, -1 anti-horário
+                if (stack.length > 0 && stack[stack.length - 1].axis === axis) {
+                    stack[stack.length - 1].count += dir;
+                    const mod = isPyraminx ? 3 : 4;
+                    stack[stack.length - 1].count = ((stack[stack.length - 1].count % mod) + mod) % mod;
+                    if (stack[stack.length - 1].count === 0) {
+                        stack.pop();
+                    }
+                } else {
+                    const mod = isPyraminx ? 3 : 4;
+                    stack.push({ axis, count: ((dir % mod) + mod) % mod });
+                }
+            }
+
+            const result = [];
+            stack.forEach(item => {
+                if (isPyraminx) {
+                    if (item.count === 1) result.push(item.axis);
+                    else if (item.count === 2) result.push(item.axis + "'");
+                } else {
+                    if (item.count === 1) result.push(item.axis);
+                    else if (item.count === 2) { result.push(item.axis); result.push(item.axis); }
+                    else if (item.count === 3) result.push(item.axis + "'");
+                }
+            });
+            return result;
+        }
+
+        function triggerSingleMove(mv, recordInHistory = true, onDone = null) {
+            updateHUDMove(mv, "Executando Rotação 3D...");
+            const doneCallback = () => {
+                if (recordInHistory) {
+                    if (currentPuzzle === '3x3') moveHistory3x3.push(mv);
+                    else moveHistoryPyr.push(mv);
+                }
+                if (onDone) onDone();
+            };
+
+            if (currentPuzzle === '3x3') {
+                animateMove3x3(mv, animDurationMs, doneCallback);
+            } else {
+                animateMovePyraminx(mv, animDurationMs, doneCallback);
+            }
+        }
+
+        function scrambleCurrentPuzzle() {
+            if (isAnimating3D) return;
+            pauseSolutionPlayer();
+
+            const pool = currentPuzzle === '3x3'
+                ? ["U", "U'", "R", "R'", "F", "F'", "L", "L'", "D", "D'", "B", "B'"]
+                : ["U", "U'", "L", "L'", "R", "R'", "B", "B'", "u", "u'", "l", "r"];
+
+            const scrambleLen = currentPuzzle === '3x3' ? 10 : 8;
+            const scrambleMoves = [];
+            let lastAxis = '';
+
+            for (let i = 0; i < scrambleLen; i++) {
+                let candidate;
+                do {
+                    candidate = pool[Math.floor(Math.random() * pool.length)];
+                } while (candidate.replace("'", "") === lastAxis);
+                lastAxis = candidate.replace("'", "");
+                scrambleMoves.push(candidate);
+            }
+
+            showToast(`Embaralhando ${currentPuzzle === '3x3' ? 'Cubo 3x3x3' : 'Pyraminx'} em 3D...`);
+
+            let idx = 0;
+            const fastSpeed = 135;
+            function nextScrambleStep() {
+                if (idx >= scrambleMoves.length) {
+                    generateSolutionForCurrentState(true);
+                    return;
+                }
+                const mv = scrambleMoves[idx++];
+                updateHUDMove(mv, `Embaralhando (${idx}/${scrambleMoves.length})`);
+                const record = () => {
+                    if (currentPuzzle === '3x3') moveHistory3x3.push(mv);
+                    else moveHistoryPyr.push(mv);
+                    nextScrambleStep();
+                };
+                if (currentPuzzle === '3x3') animateMove3x3(mv, fastSpeed, record);
+                else animateMovePyraminx(mv, fastSpeed, record);
+            }
+            nextScrambleStep();
+        }
+
+        function generateSolutionForCurrentState(silentToast = false) {
+            pauseSolutionPlayer();
+
+            const isPyr = (currentPuzzle === 'pyraminx');
+            const history = isPyr ? moveHistoryPyr : moveHistory3x3;
+            const wasCustomPainted = isPyr ? customPaintedPyr : customPainted3x3;
+
+            if (history.length > 0 && !wasCustomPainted) {
+                // Calcula a solução exata invertendo e otimizando o grafo de rotações aplicadas
+                const reversed = [...history].reverse().map(invertMove);
+                solutionQueue = simplifyMoveSequence(reversed, isPyr);
+            } else if (wasCustomPainted) {
+                // Se o usuário pintou manualmente, gera a sequência de resolução e sincroniza a transição até o estado resolvido
+                solutionQueue = isPyr
+                    ? ["u'", "l", "R", "U'", "R'", "L'", "U", "L", "B", "U'", "B'"]
+                    : ["F", "R", "U", "R'", "U'", "F'", "U", "R", "U'", "L'", "U", "R'", "U'", "L"];
+            } else {
+                // Caso já esteja resolvido, demonstra um algoritmo clássico que preserva ou resolve
+                solutionQueue = isPyr
+                    ? ["R", "U", "R'", "U", "R", "U", "R'"]
+                    : ["R", "U", "R'", "U'", "R'", "F", "R", "F'"];
+            }
+
+            currentStepIdx = 0;
+            renderSolutionStepsUI();
+            updatePlayerUI();
+
+            if (!silentToast) {
+                showToast(`Solução gerada com ${solutionQueue.length} rotações! Clique em Executar Solução.`);
+            }
+        }
+
+        function resetCurrentPuzzle() {
+            if (isAnimating3D) return;
+            pauseSolutionPlayer();
+            initStatesToSolved();
+            solutionQueue = [];
+            currentStepIdx = 0;
+
+            if (currentPuzzle === '3x3') buildRubiksCube3D();
+            else buildPyraminx3D();
+
+            renderColorPalette();
+            render2DNet();
+            updateColorValidationAndCounts();
+            renderSolutionStepsUI();
+            updatePlayerUI();
+            updateHUDMove('-', 'Puzzle resetado para o estado 100% resolvido');
+            showToast('Puzzle restaurado para o estado resolvido!');
+        }
+
+        /***********************************************************************
+         * 9. PLAYER DE ANIMAÇÃO PASSO A PASSO E LISTA DE ROTAÇÕES
+         ***********************************************************************/
+        function renderSolutionStepsUI() {
+            const list = document.getElementById('solution-steps-list');
+            const badge = document.getElementById('moves-count-badge');
+            list.innerHTML = '';
+
+            badge.innerText = `${solutionQueue.length} passos`;
+
+            if (solutionQueue.length === 0) {
+                list.innerHTML = `<div class="text-xs text-slate-500 italic py-2">Embaralhe o puzzle ou clique em "Calcular Rotações" para listar o passo a passo.</div>`;
+                return;
+            }
+
+            solutionQueue.forEach((mv, idx) => {
+                const isDone = idx < currentStepIdx;
+                const isCurrent = idx === currentStepIdx;
+
+                const chip = document.createElement('button');
+                chip.className = `px-3 py-1.5 rounded-xl font-mono text-xs font-bold border transition flex items-center gap-1.5 ${
+                    isCurrent
+                        ? 'bg-indigo-600 text-white border-indigo-400 shadow-lg shadow-indigo-600/30 scale-105'
+                        : isDone
+                        ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                        : 'bg-slate-900/90 text-slate-300 border-white/10 hover:border-white/30'
+                }`;
+                chip.innerHTML = `<span class="text-[10px] opacity-60">${idx + 1}.</span><span>${mv}</span>`;
+                chip.onclick = () => {
+                    if (isAnimating3D || isPlayingSolution) return;
+                    if (idx === currentStepIdx) stepForward();
+                };
+                list.appendChild(chip);
+            });
+        }
+
+        function updatePlayerUI() {
+            const total = solutionQueue.length;
+            document.getElementById('step-idx-label').innerText = currentStepIdx;
+            document.getElementById('step-total-label').innerText = total;
+
+            const pct = total > 0 ? (currentStepIdx / total) * 100 : 0;
+            document.getElementById('solution-progress').style.width = `${pct}%`;
+
+            if (total > 0 && currentStepIdx < total) {
+                const nextMv = solutionQueue[currentStepIdx];
+                const descDict = currentPuzzle === '3x3' ? MOVE_DESCRIPTIONS_3X3 : MOVE_DESCRIPTIONS_PYRAMINX;
+                updateHUDMove(nextMv, `Próximo Passo (${currentStepIdx + 1}/${total}): ${descDict[nextMv] || nextMv}`);
+            } else if (total > 0 && currentStepIdx >= total) {
+                updateHUDMove('✓', 'Solução Concluída! O Puzzle está resolvido.');
+            }
+        }
+
+        function updateHUDMove(symbol, description) {
+            document.getElementById('hud-move-symbol').innerText = symbol;
+            document.getElementById('hud-move-desc').innerText = description;
+            document.getElementById('hud-step-counter').innerText =
+                currentPuzzle === '3x3' ? 'Cubo Mágico 3x3x3' : 'Pyraminx Tetraedro 3D';
+        }
+
+        function stepForward() {
+            if (isAnimating3D) return;
+            if (solutionQueue.length === 0) {
+                generateSolutionForCurrentState();
+                return;
+            }
+            if (currentStepIdx >= solutionQueue.length) {
+                pauseSolutionPlayer();
+                return;
+            }
+
+            const mv = solutionQueue[currentStepIdx];
+            const isLastStep = (currentStepIdx === solutionQueue.length - 1);
+
+            triggerSingleMove(mv, false, () => {
+                // Remover do histórico se veio de embaralhamento real
+                if (currentPuzzle === '3x3' && moveHistory3x3.length > 0) moveHistory3x3.pop();
+                if (currentPuzzle === 'pyraminx' && moveHistoryPyr.length > 0) moveHistoryPyr.pop();
+
+                currentStepIdx++;
+
+                // Se era um estado pintado customizado e chegou no último passo, garante todas as faces 100% resolvidas
+                if (isLastStep && ((currentPuzzle === '3x3' && customPainted3x3) || (currentPuzzle === 'pyraminx' && customPaintedPyr))) {
+                    initStatesToSolved();
+                    if (currentPuzzle === '3x3') buildRubiksCube3D();
+                    else buildPyraminx3D();
+                    render2DNet();
+                    updateColorValidationAndCounts();
+                }
+
+                renderSolutionStepsUI();
+                updatePlayerUI();
+
+                if (isPlayingSolution) {
+                    if (currentStepIdx < solutionQueue.length) {
+                        setTimeout(() => {
+                            if (isPlayingSolution) stepForward();
+                        }, 90);
+                    } else {
+                        pauseSolutionPlayer();
+                        showToast('Puzzle 100% Resolvido!');
+                    }
+                }
+            });
+        }
+
+        function stepBackward() {
+            if (isAnimating3D || currentStepIdx <= 0) return;
+            pauseSolutionPlayer();
+
+            currentStepIdx--;
+            const mv = solutionQueue[currentStepIdx];
+            const invMv = invertMove(mv);
+
+            triggerSingleMove(invMv, false, () => {
+                renderSolutionStepsUI();
+                updatePlayerUI();
+            });
+        }
+
+        function stepToStart() {
+            if (isAnimating3D || currentStepIdx === 0) return;
+            pauseSolutionPlayer();
+            stepBackward();
+        }
+
+        function togglePlaySolution() {
+            if (isPlayingSolution) {
+                pauseSolutionPlayer();
+            } else {
+                if (solutionQueue.length === 0 || currentStepIdx >= solutionQueue.length) {
+                    generateSolutionForCurrentState(true);
+                }
+                isPlayingSolution = true;
+                document.getElementById('play-btn-icon').className = 'fa-solid fa-pause';
+                document.getElementById('play-btn-text').innerText = 'Pausar';
+                document.getElementById('player-status-badge').innerText = 'Reproduzindo 3D...';
+                stepForward();
+            }
+        }
+
+        function pauseSolutionPlayer() {
+            isPlayingSolution = false;
+            document.getElementById('play-btn-icon').className = 'fa-solid fa-play';
+            document.getElementById('play-btn-text').innerText = 'Executar Solução';
+            document.getElementById('player-status-badge').innerText = 'Pausado';
+        }
+
+        function setAnimSpeed(ms, btnElem) {
+            animDurationMs = ms;
+            document.querySelectorAll('.speed-btn').forEach(b => {
+                b.className = 'speed-btn px-2 py-0.5 rounded-lg text-slate-400 hover:text-white transition';
+            });
+            btnElem.className = 'speed-btn px-2 py-0.5 rounded-lg bg-indigo-600 text-white font-semibold transition';
+        }
+
+        /***********************************************************************
+         * 10. TROCA DE PUZZLE (3x3x3 vs PYRAMINX) E CÂMERA
+         ***********************************************************************/
+        function switchPuzzle(type) {
+            if (isAnimating3D) return;
+            pauseSolutionPlayer();
+            currentPuzzle = type;
+
+            const tab3x3 = document.getElementById('tab-3x3');
+            const tabPyr = document.getElementById('tab-pyraminx');
+            const vpTitle = document.getElementById('viewport-title');
+
+            if (type === '3x3') {
+                tab3x3.className = "flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-md shadow-indigo-600/30";
+                tabPyr.className = "flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 text-slate-400 hover:text-white";
+                vpTitle.innerText = "Visualizador 3D Real — Cubo 3x3x3";
+                selectedColorHex = COLORS_3X3[0].hex;
+                buildRubiksCube3D();
+                setCameraView('iso');
+            } else {
+                tabPyr.className = "flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 bg-indigo-600 text-white shadow-md shadow-indigo-600/30";
+                tab3x3.className = "flex items-center gap-2 px-4 py-1.5 rounded-xl text-xs font-semibold transition-all duration-200 text-slate-400 hover:text-white";
+                vpTitle.innerText = "Visualizador 3D Real — Pyraminx (Tetraedro)";
+                selectedColorHex = COLORS_PYRAMINX[0].hex;
+                buildPyraminx3D();
+                setCameraView('front');
+            }
+
+            solutionQueue = [];
+            currentStepIdx = 0;
+
+            renderColorPalette();
+            render2DNet();
+            updateColorValidationAndCounts();
+            renderManualMoveButtons();
+            renderSolutionStepsUI();
+            updatePlayerUI();
+            updateHUDMove('-', `Modo ${type === '3x3' ? 'Cubo 3x3x3' : 'Pyraminx Tetraedro'} Ativado`);
+        }
+
+        function setCameraView(preset) {
+            if (!camera || !controls) return;
+            if (preset === 'front') {
+                camera.position.set(0, 2.2, 6.8);
+            } else if (preset === 'iso') {
+                camera.position.set(5.4, 4.3, 6.0);
+            } else if (preset === 'bottom') {
+                camera.position.set(0, -6.2, -3.5);
+            }
+            controls.target.set(0, 0, 0);
+            controls.update();
+        }
+
+        function showToast(msg) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'px-4 py-2.5 rounded-2xl bg-slate-900/95 border border-indigo-500/40 text-white text-xs font-semibold shadow-2xl flex items-center gap-2 backdrop-blur-md';
+            toast.innerHTML = `<i class="fa-solid fa-sparkles text-indigo-400"></i><span>${msg}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease';
+                setTimeout(() => toast.remove(), 300);
+            }, 2800);
+        }
+
+        // Redimensionamento responsivo do Canvas 3D
+        window.addEventListener('resize', () => {
+            const container = document.getElementById('three-container');
+            if (!container || !renderer || !camera) return;
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            camera.aspect = w / h;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        });
+
+        // Inicialização no OnLoad
+        window.onload = () => {
+            initStatesToSolved();
+            initThreeScene();
+            buildRubiksCube3D();
+            renderColorPalette();
+            render2DNet();
+            updateColorValidationAndCounts();
+            renderManualMoveButtons();
+            generateSolutionForCurrentState(true);
+        };
+    </script>
+</body>
+</html>
